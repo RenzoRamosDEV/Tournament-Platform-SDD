@@ -56,8 +56,8 @@ class Team(models.Model):
     class Meta:
         db_table = "teams"
 
-
-class TeamMember(models.Model):
+    def __str__(self):
+        return self.name(models.Model):
     user = models.ForeignKey(User, on_delete=models.RESTRICT, db_column="user_id")
     team = models.ForeignKey(Team, on_delete=models.RESTRICT, db_column="team_id")
     joined_at = models.DateTimeField(default=timezone.now)
