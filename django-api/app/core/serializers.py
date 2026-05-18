@@ -6,7 +6,7 @@ from core.models import Match, Team, TeamMember, Tournament, TournamentTeam, Use
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "username", "role", "elo", "created_at")
+        fields = ("id", "username", "role", "elo", "is_active", "created_at")
         read_only_fields = ("id", "elo", "created_at")
 
 
