@@ -32,6 +32,9 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
+    def __str__(self):
+        return f"{self.username} ({self.role})"
+
     class Meta:
         db_table = "users"
         indexes = [models.Index(fields=["-elo"], name="users_elo_desc_idx")]
