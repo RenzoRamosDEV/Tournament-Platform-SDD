@@ -178,3 +178,6 @@ class Match(models.Model):
                 name="matches_winner_valid",
             ),
         ]
+
+    def __str__(self):
+        return f"{self.team_a} vs {self.team_b} [{self.status}]"
