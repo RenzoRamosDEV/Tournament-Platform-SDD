@@ -1,0 +1,13 @@
+#IA
+.claude
+.github
+.opencode
+.vscode
+.agents
+
+# APM dependencies
+apm_modules/
+.mcp.json
+apm.lock.yaml
+apm.yml
+opencode.json
