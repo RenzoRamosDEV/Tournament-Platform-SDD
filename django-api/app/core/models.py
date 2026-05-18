@@ -68,6 +68,9 @@ class Team(models.Model):
             models.UniqueConstraint(fields=["user", "team"], name="team_members_pk")
         ]
 
+    def __str__(self):
+        return f"{self.user} en {self.team}"
+
 
 class Tournament(models.Model):
     STATUS_CHOICES = [
