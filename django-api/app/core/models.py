@@ -125,6 +125,9 @@ class TournamentTeam(models.Model):
             )
         ]
 
+    def __str__(self):
+        return f"{self.name} ({self.status})"
+
 
 class Match(models.Model):
     STATUS_CHOICES = [
