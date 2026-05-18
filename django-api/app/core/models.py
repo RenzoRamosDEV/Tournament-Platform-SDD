@@ -57,7 +57,10 @@ class Team(models.Model):
         db_table = "teams"
 
     def __str__(self):
-        return self.name(models.Model):
+        return self.name
+
+
+class TeamMember(models.Model):
     user = models.ForeignKey(User, on_delete=models.RESTRICT, db_column="user_id")
     team = models.ForeignKey(Team, on_delete=models.RESTRICT, db_column="team_id")
     joined_at = models.DateTimeField(default=timezone.now)
@@ -69,7 +72,7 @@ class Team(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.user} en {self.team}"
+        return f"{self.user} in {self.team}"
 
 
 class Tournament(models.Model):
@@ -129,7 +132,7 @@ class TournamentTeam(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.status})"
+        return f"{self.team} in {self.tournament}"
 
 
 class Match(models.Model):
