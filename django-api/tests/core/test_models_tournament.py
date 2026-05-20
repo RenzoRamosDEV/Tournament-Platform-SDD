@@ -7,7 +7,9 @@ from core.models import Team, Tournament, TournamentTeam, User
 
 
 def make_user(username="u"):
-    return User.objects.create_user(username=username, password="x", role="player")
+    return User.objects.create_user(
+        email=f"{username}@example.com", username=username, password="x", role="player"
+    )
 
 
 def make_team(name="T", owner=None):
@@ -16,13 +18,16 @@ def make_team(name="T", owner=None):
     return Team.objects.create(name=name, owner=owner)
 
 
-def make_tournament(**kwargs):
+def make_tournament(creator=None, **kwargs):
+    if creator is None:
+        creator = make_user("creator")
     defaults = dict(
         name="Open Cup",
-        format="single_elim",
+        format="single_elimination",
         max_teams=8,
         start_date=datetime.date(2026, 1, 1),
         end_date=datetime.date(2026, 1, 10),
+        created_by=creator,
     )
     defaults.update(kwargs)
     return Tournament.objects.create(**defaults)
@@ -34,8 +39,9 @@ class TournamentDefaultsTest(TestCase):
         self.assertEqual(t.status, "draft")
 
     def test_valid_statuses_accepted(self):
+        creator = make_user("c")
         for s in ("draft", "open", "ongoing", "finished"):
-            t = make_tournament(name=f"T_{s}", status=s)
+            t = make_tournament(creator=creator, name=f"T_{s}", status=s)
             self.assertEqual(t.status, s)
             t.delete()
 
@@ -44,6 +50,14 @@ class TournamentDefaultsTest(TestCase):
             t = make_tournament(status="unknown")
             from django.db import connection
             connection.check_constraints()
+
+    def test_format_single_elimination_accepted(self):
+        t = make_tournament(format="single_elimination")
+        self.assertEqual(t.format, "single_elimination")
+
+    def test_format_round_robin_accepted(self):
+        t = make_tournament(format="round_robin")
+        self.assertEqual(t.format, "round_robin")
 
     def test_invalid_format_raises(self):
         with self.assertRaises(Exception):
@@ -65,6 +79,11 @@ class TournamentDefaultsTest(TestCase):
             )
             from django.db import connection
             connection.check_constraints()
+
+    def test_created_by_is_stored(self):
+        creator = make_user("org")
+        t = make_tournament(creator=creator)
+        self.assertEqual(t.created_by, creator)
 
 
 class TournamentTeamTest(TestCase):

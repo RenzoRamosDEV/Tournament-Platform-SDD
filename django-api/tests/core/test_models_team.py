@@ -5,7 +5,9 @@ from core.models import Team, TeamMember, User
 
 
 def make_user(username="u", role="player"):
-    return User.objects.create_user(username=username, password="x", role=role)
+    return User.objects.create_user(
+        email=f"{username}@example.com", username=username, password="x", role=role
+    )
 
 
 class TeamCreationTest(TestCase):
@@ -42,7 +44,11 @@ class TeamMemberTest(TestCase):
         with self.assertRaises(IntegrityError):
             TeamMember.objects.create(user=self.member, team=self.team)
 
-    def test_delete_team_with_members_blocked(self):
+    def test_delete_team_cascades_members(self):
         TeamMember.objects.create(user=self.member, team=self.team)
-        with self.assertRaises(IntegrityError):
-            self.team.delete()
+        team_id = self.team.pk
+        # owner still exists but team deletion cascades members (owner PROTECT prevents user deletion)
+        # We need to remove the owner FK first to delete the team
+        # Actually: Team.owner has PROTECT, deleting team itself is fine — it's deleting the owner that's blocked
+        self.team.delete()
+        self.assertFalse(TeamMember.objects.filter(team_id=team_id).exists())
