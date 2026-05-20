@@ -1,15 +1,37 @@
 ## ADDED Requirements
 
+### Requirement: CORS_ALLOWED_ORIGINS environment variable
+`settings.py` SHALL read `CORS_ALLOWED_ORIGINS` from the environment using `python-decouple`. The value SHALL be parsed as a comma-separated string and split into a Python list, with whitespace stripped from each entry. The default value when the variable is absent SHALL be `'http://localhost:3000,http://localhost:5073'`.
+
+#### Scenario: CORS origins parsed correctly
+- **WHEN** `CORS_ALLOWED_ORIGINS=http://localhost:3000, http://localhost:5073` is set in the environment (with a space after the comma)
+- **THEN** `settings.CORS_ALLOWED_ORIGINS` equals `['http://localhost:3000', 'http://localhost:5073']`
+
+#### Scenario: Default origins apply when variable is absent
+- **WHEN** `CORS_ALLOWED_ORIGINS` is not set in the environment
+- **THEN** `settings.CORS_ALLOWED_ORIGINS` equals `['http://localhost:3000', 'http://localhost:5073']`
+
+### Requirement: PAGE_SIZE environment variable
+`settings.py` SHALL read `PAGE_SIZE` from the environment as an integer using `python-decouple`. The default value when absent SHALL be `20`. This value SHALL be used as `REST_FRAMEWORK['PAGE_SIZE']`.
+
+#### Scenario: Custom PAGE_SIZE is applied
+- **WHEN** `PAGE_SIZE=50` is set in the environment
+- **THEN** `settings.REST_FRAMEWORK['PAGE_SIZE']` equals `50`
+
+#### Scenario: PAGE_SIZE defaults to 20
+- **WHEN** `PAGE_SIZE` is not set in the environment
+- **THEN** `settings.REST_FRAMEWORK['PAGE_SIZE']` equals `20`
+
 ### Requirement: Environment-variable-driven database configuration
-Django's `settings.py` SHALL read all database connection parameters exclusively from environment variables. Hardcoded credential values MUST NOT exist in any committed file. `python-dotenv` SHALL be used to load a `.env` file from the project root when present.
+Django's `settings.py` SHALL read all database connection parameters exclusively from environment variables. Hardcoded credential values MUST NOT exist in any committed file. `python-decouple` SHALL be used to load a `.env` file from the project root when present (replacing `python-dotenv`).
 
 #### Scenario: All variables set — Django connects
 - **WHEN** `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_HOST`, and `DB_PORT` are all set in the environment
 - **THEN** Django reads them and connects to PostgreSQL without error
 
 #### Scenario: Optional variables absent — defaults apply
-- **WHEN** `DB_NAME`, `DB_HOST`, and `DB_PORT` are not set
-- **THEN** Django uses `tournament_platform`, `localhost`, and `5432` respectively
+- **WHEN** `DB_HOST` and `DB_PORT` are not set
+- **THEN** Django uses `localhost` and `5432` respectively
 
 ---
 
@@ -27,11 +49,11 @@ The system SHALL raise an error at settings-load time (before any database opera
 ---
 
 ### Requirement: .env.example provided and .env gitignored
-The repository SHALL include a `.env.example` file listing all five connection variables with placeholder values and inline comments. A `.env` file containing real credentials MUST be listed in `.gitignore` and MUST NOT be committed.
+The repository SHALL include a `.env.example` file listing all required variables with placeholder values and inline comments. A `.env` file containing real credentials MUST be listed in `.gitignore` and MUST NOT be committed. The required variables are: `SECRET_KEY`, `DEBUG`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `CORS_ALLOWED_ORIGINS`, `PAGE_SIZE`.
 
 #### Scenario: .env.example contains all required keys
 - **WHEN** `.env.example` is read
-- **THEN** it contains exactly the keys: `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, each with a placeholder value and a one-line comment
+- **THEN** it contains exactly the keys: `SECRET_KEY`, `DEBUG`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT`, `CORS_ALLOWED_ORIGINS`, `PAGE_SIZE`, each with a placeholder value and a one-line comment
 
 #### Scenario: .env is gitignored
 - **WHEN** a `.env` file is created at the project root
