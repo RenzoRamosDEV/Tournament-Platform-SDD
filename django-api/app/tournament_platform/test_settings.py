@@ -1,6 +1,6 @@
 import os
 
-# Provide stub credentials so settings.py doesn't raise KeyError on import.
+os.environ.setdefault("SECRET_KEY", "_test_secret_key")
 os.environ.setdefault("DB_USER", "_test_user")
 os.environ.setdefault("DB_PASSWORD", "_test_password")
 

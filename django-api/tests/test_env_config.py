@@ -1,17 +1,23 @@
 """
 Tests for env-config capability.
-These tests import settings directly (not via DJANGO_SETTINGS_MODULE)
-so they can manipulate os.environ before the module loads.
+These tests reload settings with patched os.environ to verify decouple behavior.
 """
 import importlib
 import os
 from pathlib import Path
 
 import pytest
+from decouple import UndefinedValueError
+
+
+class _SettingsSnapshot:
+    """Immutable snapshot of settings attributes captured before env is restored."""
+    def __init__(self, module):
+        self.__dict__.update({k: v for k, v in vars(module).items() if not k.startswith("__")})
 
 
 def _reload_settings(env_overrides: dict):
-    """Temporarily patch os.environ and reload settings, then restore."""
+    """Temporarily patch os.environ, reload settings, capture a snapshot, then restore."""
     original = {k: os.environ.get(k) for k in env_overrides}
     for k, v in env_overrides.items():
         if v is None:
@@ -21,7 +27,7 @@ def _reload_settings(env_overrides: dict):
     try:
         import tournament_platform.settings as s
         importlib.reload(s)
-        return s
+        return _SettingsSnapshot(s)
     finally:
         for k, orig_v in original.items():
             if orig_v is None:
@@ -32,15 +38,19 @@ def _reload_settings(env_overrides: dict):
 
 
 class EnvConfigRequiredVarsTest:
-    """DB_USER and DB_PASSWORD are required — absence must raise KeyError."""
+    """DB_USER, DB_PASSWORD, and SECRET_KEY are required — absence must raise UndefinedValueError."""
 
-    def test_db_user_missing_raises_key_error(self):
-        with pytest.raises(KeyError, match="DB_USER"):
+    def test_db_user_missing_raises_undefined_value_error(self):
+        with pytest.raises(UndefinedValueError):
             _reload_settings({"DB_USER": None, "DB_PASSWORD": "pw"})
 
-    def test_db_password_missing_raises_key_error(self):
-        with pytest.raises(KeyError, match="DB_PASSWORD"):
+    def test_db_password_missing_raises_undefined_value_error(self):
+        with pytest.raises(UndefinedValueError):
             _reload_settings({"DB_USER": "user", "DB_PASSWORD": None})
+
+    def test_secret_key_missing_raises_undefined_value_error(self):
+        with pytest.raises(UndefinedValueError):
+            _reload_settings({"SECRET_KEY": None, "DB_USER": "user", "DB_PASSWORD": "pw"})
 
 
 class EnvConfigOptionalVarsTest:
@@ -57,14 +67,43 @@ class EnvConfigOptionalVarsTest:
         db = s.DATABASES["default"]
         assert db["NAME"] == "tournament_platform"
         assert db["HOST"] == "localhost"
-        assert db["PORT"] == "5432"
+        assert db["PORT"] == 5432
+
+    def test_cors_origins_default(self):
+        s = _reload_settings({
+            "DB_USER": "testuser",
+            "DB_PASSWORD": "testpass",
+            "CORS_ALLOWED_ORIGINS": None,
+        })
+        assert "http://localhost:3000" in s.CORS_ALLOWED_ORIGINS
+        assert "http://localhost:5073" in s.CORS_ALLOWED_ORIGINS
+
+    def test_page_size_default(self):
+        s = _reload_settings({
+            "DB_USER": "testuser",
+            "DB_PASSWORD": "testpass",
+            "PAGE_SIZE": None,
+        })
+        assert s.REST_FRAMEWORK["PAGE_SIZE"] == 20
+
+    def test_page_size_override(self):
+        s = _reload_settings({
+            "DB_USER": "testuser",
+            "DB_PASSWORD": "testpass",
+            "PAGE_SIZE": "50",
+        })
+        assert s.REST_FRAMEWORK["PAGE_SIZE"] == 50
 
 
 class EnvExampleFileTest:
-    """`.env.example` must contain exactly the five required keys."""
+    """`.env.example` must contain exactly all required keys."""
 
     ENV_EXAMPLE = Path(__file__).parent.parent / ".env.example"
-    REQUIRED_KEYS = {"DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST", "DB_PORT"}
+    REQUIRED_KEYS = {
+        "SECRET_KEY", "DEBUG",
+        "DB_NAME", "DB_USER", "DB_PASSWORD", "DB_HOST", "DB_PORT",
+        "CORS_ALLOWED_ORIGINS", "PAGE_SIZE",
+    }
 
     def test_env_example_exists(self):
         assert self.ENV_EXAMPLE.exists(), ".env.example not found at project root"
@@ -96,5 +135,4 @@ class PgSettingsTest:
         os.environ.setdefault("DB_PASSWORD", "testpass")
         import tournament_platform.pg_settings as pg
         import tournament_platform.settings as s
-        # pg_settings must not define its own DATABASES
         assert not hasattr(pg, "DATABASES") or pg.DATABASES is s.DATABASES
