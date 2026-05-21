@@ -3,28 +3,39 @@ from rest_framework import serializers
 from core.models import Match, Team, TeamMember, Tournament, TournamentTeam, User
 
 
-class UserSerializer(serializers.ModelSerializer):
+class UserListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "username", "role", "elo")
+
+
+class UserResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ("id", "username", "email", "role", "elo", "avatar_url", "created_at")
         read_only_fields = ("id", "email", "elo", "avatar_url", "created_at")
 
 
-class TeamSerializer(serializers.ModelSerializer):
+class TeamListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = ("id", "name", "owner", "created_at")
+
+
+class TeamResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
         fields = ("id", "name", "owner", "created_at")
         read_only_fields = ("id", "owner", "created_at")
 
 
-class TeamMemberSerializer(serializers.ModelSerializer):
+class TournamentListSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TeamMember
-        fields = ("user", "team", "joined_at")
-        read_only_fields = ("joined_at",)
+        model = Tournament
+        fields = ("id", "name", "status")
 
 
-class TournamentSerializer(serializers.ModelSerializer):
+class TournamentResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tournament
         fields = ("id", "name", "status", "format", "max_teams", "start_date", "end_date", "created_by")
@@ -38,14 +49,13 @@ class TournamentSerializer(serializers.ModelSerializer):
         return data
 
 
-class TournamentTeamSerializer(serializers.ModelSerializer):
+class MatchListSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TournamentTeam
-        fields = ("tournament", "team", "registered_at")
-        read_only_fields = ("registered_at",)
+        model = Match
+        fields = ("id", "tournament", "team_a", "team_b", "status")
 
 
-class MatchSerializer(serializers.ModelSerializer):
+class MatchResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Match
         fields = (
@@ -67,15 +77,15 @@ class MatchSerializer(serializers.ModelSerializer):
         return data
 
 
-class MatchReportSerializer(serializers.Serializer):
-    winner_id = serializers.IntegerField()
-    score_team_a = serializers.IntegerField(min_value=0)
-    score_team_b = serializers.IntegerField(min_value=0)
+class TeamMemberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeamMember
+        fields = ("user", "team", "joined_at")
+        read_only_fields = ("joined_at",)
 
-    def validate_winner_id(self, value):
-        match = self.context.get("match")
-        if match and value not in (match.team_a_id, match.team_b_id):
-            raise serializers.ValidationError(
-                "winner_id must be the id of team_a or team_b of this match."
-            )
-        return value
+
+class TournamentTeamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TournamentTeam
+        fields = ("tournament", "team", "registered_at")
+        read_only_fields = ("registered_at",)
