@@ -4,7 +4,9 @@ from unittest.mock import patch
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 
-from core.models import EloHistory, Match, Team, Tournament, User
+from apps.teams.models import Team
+from apps.tournaments.models import Match, Tournament
+from apps.users.models import EloHistory, User
 
 
 class SeedDataEntityCountsTest(TestCase):

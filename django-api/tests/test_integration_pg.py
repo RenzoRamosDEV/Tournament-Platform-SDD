@@ -1,6 +1,6 @@
 """
 Integration tests requiring a live PostgreSQL >= 15 instance.
-Run with: pytest tests/test_integration_pg.py -m integration --ds=tournament_platform.pg_settings
+Run with: pytest tests/test_integration_pg.py -m integration --ds=config.pg_settings
 """
 import pytest
 from django.db import connection
@@ -124,7 +124,9 @@ class MatchWinnerConstraintTest:
 
     def test_invalid_winner_raises_integrity_error(self):
         from django.db import IntegrityError
-        from core.models import User, Team, Tournament
+        from apps.users.models import User
+        from apps.teams.models import Team
+        from apps.tournaments.models import Tournament
         import datetime
 
         user = User.objects.create_user(username="t_user", password="pw")
