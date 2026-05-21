@@ -2,15 +2,15 @@ import datetime
 
 from django.test import TestCase
 
+from core.input import MatchReportSerializer
 from core.models import Match, Team, TeamMember, Tournament, TournamentTeam, User
-from core.serializers import (
-    MatchReportSerializer,
-    MatchSerializer,
+from core.output import (
+    MatchResponseSerializer as MatchSerializer,
     TeamMemberSerializer,
-    TeamSerializer,
-    TournamentSerializer,
+    TeamResponseSerializer as TeamSerializer,
+    TournamentResponseSerializer as TournamentSerializer,
     TournamentTeamSerializer,
-    UserSerializer,
+    UserResponseSerializer as UserSerializer,
 )
 
 
