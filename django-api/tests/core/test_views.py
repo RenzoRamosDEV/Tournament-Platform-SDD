@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from core.models import Match, Team, Tournament, User
+from core.models import Match, Team, Tournament, TournamentTeam, User
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +144,29 @@ class TeamListViewTest(TestCase):
         item = response.json()["results"][0]
         for field in ("id", "name", "owner", "created_at"):
             self.assertIn(field, item)
+
+
+class TeamListFilterTest(TestCase):
+    def setUp(self):
+        self.url = reverse("team-list")
+        self.admin = make_user(role="admin")
+        self.t1 = make_tournament(created_by=self.admin)
+        self.t2 = make_tournament(created_by=self.admin)
+        self.team_in = make_team()
+        self.team_out = make_team()
+        TournamentTeam.objects.create(tournament=self.t1, team=self.team_in)
+
+    def test_filter_by_tournament_returns_only_registered_teams(self):
+        response = self.client.get(self.url, {"tournament_id": self.t1.id})
+        self.assertEqual(response.status_code, 200)
+        ids = [t["id"] for t in response.json()["results"]]
+        self.assertIn(self.team_in.id, ids)
+        self.assertNotIn(self.team_out.id, ids)
+
+    def test_filter_by_nonexistent_tournament_returns_empty(self):
+        response = self.client.get(self.url, {"tournament_id": 99999})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [])
 
 
 class TeamCreateViewTest(TestCase):
@@ -294,7 +317,7 @@ class MatchListViewTest(TestCase):
     def test_pagination_envelope_present(self):
         response = self.client.get(self.url)
         data = response.json()
-        for key in ("count", "next", "previous", "results"):
+        for key in ("next", "previous", "results"):
             self.assertIn(key, data)
 
     def test_filter_by_tournament_id(self):
@@ -307,6 +330,39 @@ class MatchListViewTest(TestCase):
         response = self.client.get(self.url, {"tournament_id": 99999})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"], [])
+
+    def test_cursor_pagination_has_no_count_key(self):
+        response = self.client.get(self.url)
+        data = response.json()
+        self.assertNotIn("count", data)
+        self.assertIn("next", data)
+        self.assertIn("previous", data)
+        self.assertIn("results", data)
+
+    def test_filter_by_valid_status(self):
+        t = make_tournament()
+        response = self.client.get(self.url, {"status": "scheduled"})
+        self.assertEqual(response.status_code, 200)
+        for m in response.json()["results"]:
+            self.assertEqual(m["status"], "scheduled")
+
+    def test_filter_by_invalid_status_returns_400(self):
+        response = self.client.get(self.url, {"status": "postponed"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_cursor_pagination_consistent_under_inserts(self):
+        t = make_tournament()
+        for _ in range(5):
+            make_match(tournament=t)
+        r1 = self.client.get(self.url, {"page_size": 3})
+        self.assertEqual(r1.status_code, 200)
+        page1_ids = {m["id"] for m in r1.json()["results"]}
+        next_url = r1.json().get("next")
+        if next_url:
+            make_match(tournament=t)
+            r2 = self.client.get(next_url)
+            page2_ids = {m["id"] for m in r2.json()["results"]}
+            self.assertEqual(len(page1_ids & page2_ids), 0)
 
 
 class MatchReportViewTest(TestCase):
@@ -382,3 +438,107 @@ class MatchReportViewTest(TestCase):
             self.url, self.valid_data, content_type="application/json"
         )
         self.assertEqual(response.status_code, 401)
+
+
+# ---------------------------------------------------------------------------
+# 7. Throttling & custom exception handler
+# ---------------------------------------------------------------------------
+
+class SerializerModuleStructureTest(TestCase):
+    """Verify serializers.py no longer exists and input/output modules are present."""
+
+    def test_core_serializers_module_does_not_exist(self):
+        import importlib
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module("core.serializers")
+
+    def test_core_input_module_exists(self):
+        import importlib
+        mod = importlib.import_module("core.input")
+        self.assertTrue(hasattr(mod, "UserCreateSerializer"))
+        self.assertTrue(hasattr(mod, "TeamCreateSerializer"))
+        self.assertTrue(hasattr(mod, "TournamentCreateSerializer"))
+        self.assertTrue(hasattr(mod, "MatchReportSerializer"))
+
+    def test_core_output_module_exists(self):
+        import importlib
+        mod = importlib.import_module("core.output")
+        self.assertTrue(hasattr(mod, "UserResponseSerializer"))
+        self.assertTrue(hasattr(mod, "UserListSerializer"))
+        self.assertTrue(hasattr(mod, "TeamResponseSerializer"))
+        self.assertTrue(hasattr(mod, "TeamListSerializer"))
+        self.assertTrue(hasattr(mod, "TournamentResponseSerializer"))
+        self.assertTrue(hasattr(mod, "TournamentListSerializer"))
+        self.assertTrue(hasattr(mod, "MatchResponseSerializer"))
+        self.assertTrue(hasattr(mod, "MatchListSerializer"))
+
+
+class UserRoleFilterTest(TestCase):
+    def setUp(self):
+        self.url = reverse("user-list")
+        self.admin = make_user(role="admin")
+        self.player = make_user(role="player")
+        self.organizer = make_user(role="organizer")
+
+    def test_admin_filter_by_valid_role(self):
+        client = auth_client(self.admin)
+        response = client.get(self.url, {"role": "player"})
+        self.assertEqual(response.status_code, 200)
+        for u in response.json()["results"]:
+            self.assertEqual(u["role"], "player")
+
+    def test_non_admin_role_filter_returns_403(self):
+        client = auth_client(self.player)
+        response = client.get(self.url, {"role": "player"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_invalid_role_returns_400(self):
+        client = auth_client(self.admin)
+        response = client.get(self.url, {"role": "superuser"})
+        self.assertEqual(response.status_code, 400)
+
+
+class ThrottleExceptionHandlerTest(TestCase):
+    """Custom 429 body and delegation of non-throttle exceptions."""
+
+    def setUp(self):
+        self.url = reverse("user-list")
+
+    def _patch_throttle(self, wait_seconds):
+        """Return a context manager that forces every throttle check to fail."""
+        from unittest.mock import patch
+        return patch(
+            "rest_framework.throttling.SimpleRateThrottle.allow_request",
+            return_value=False,
+        ), patch(
+            "rest_framework.throttling.SimpleRateThrottle.wait",
+            return_value=wait_seconds,
+        )
+
+    def test_throttled_returns_429_with_structured_body(self):
+        from unittest.mock import patch
+        with patch("rest_framework.throttling.SimpleRateThrottle.allow_request", return_value=False), \
+             patch("rest_framework.throttling.SimpleRateThrottle.wait", return_value=60.0):
+            response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 429)
+        data = response.json()
+        self.assertEqual(data["error"], "rate_limit_exceeded")
+        self.assertIn("message", data)
+        self.assertIn("retry_after_seconds", data)
+
+    def test_retry_after_seconds_is_ceiling_integer(self):
+        from unittest.mock import patch
+        with patch("rest_framework.throttling.SimpleRateThrottle.allow_request", return_value=False), \
+             patch("rest_framework.throttling.SimpleRateThrottle.wait", return_value=127.4):
+            response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()["retry_after_seconds"], 128)
+
+    def test_non_throttle_exception_uses_default_handler(self):
+        from unittest.mock import patch
+        with patch("rest_framework.throttling.SimpleRateThrottle.allow_request", return_value=False), \
+             patch("rest_framework.throttling.SimpleRateThrottle.wait", return_value=60.0):
+            response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 429)
+        data = response.json()
+        self.assertNotIn("detail", data)
