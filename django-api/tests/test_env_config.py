@@ -25,7 +25,7 @@ def _reload_settings(env_overrides: dict):
         else:
             os.environ[k] = v
     try:
-        import tournament_platform.settings as s
+        import config.settings.base as s
         importlib.reload(s)
         return _SettingsSnapshot(s)
     finally:
@@ -34,7 +34,7 @@ def _reload_settings(env_overrides: dict):
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = orig_v
-        importlib.reload(importlib.import_module("tournament_platform.settings"))
+        importlib.reload(importlib.import_module("config.settings.base"))
 
 
 class EnvConfigRequiredVarsTest:
@@ -122,17 +122,17 @@ class EnvExampleFileTest:
 
 
 class PgSettingsTest:
-    """pg_settings must import cleanly and not override DATABASES."""
+    """config.pg_settings must import cleanly and not override DATABASES."""
 
     def test_pg_settings_imports_without_error(self):
         os.environ.setdefault("DB_USER", "testuser")
         os.environ.setdefault("DB_PASSWORD", "testpass")
-        import tournament_platform.pg_settings as pg  # noqa: F401
+        import config.pg_settings as pg  # noqa: F401
         assert pg is not None
 
     def test_pg_settings_does_not_override_databases(self):
         os.environ.setdefault("DB_USER", "testuser")
         os.environ.setdefault("DB_PASSWORD", "testpass")
-        import tournament_platform.pg_settings as pg
-        import tournament_platform.settings as s
+        import config.pg_settings as pg
+        import config.settings.base as s
         assert not hasattr(pg, "DATABASES") or pg.DATABASES is s.DATABASES
