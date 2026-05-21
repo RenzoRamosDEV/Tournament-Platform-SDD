@@ -6,21 +6,44 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 
+from core.input import MatchReportSerializer, TeamCreateSerializer, TournamentCreateSerializer
 from core.models import Match, Team, TeamMember, Tournament, TournamentTeam, User
-from core.serializers import (
-    MatchReportSerializer,
-    MatchSerializer,
+from core.output import (
+    MatchListSerializer,
+    MatchResponseSerializer,
+    TeamListSerializer,
     TeamMemberSerializer,
-    TeamSerializer,
-    TournamentSerializer,
+    TeamResponseSerializer,
+    TournamentListSerializer,
+    TournamentResponseSerializer,
     TournamentTeamSerializer,
-    UserSerializer,
+    UserListSerializer,
+    UserResponseSerializer,
 )
+from core.pagination import MatchCursorPagination
 
 
 class IsAdminRole(IsAuthenticated):
     def has_permission(self, request, view):
         return super().has_permission(request, view) and request.user.role == "admin"
+
+
+class UserFilterSet(django_filters.FilterSet):
+    role = django_filters.ChoiceFilter(choices=User.ROLE_CHOICES)
+
+    class Meta:
+        model = User
+        fields = ["role"]
+
+
+class TeamFilterSet(django_filters.FilterSet):
+    tournament_id = django_filters.NumberFilter(
+        field_name="tournamentteam__tournament_id", lookup_expr="exact"
+    )
+
+    class Meta:
+        model = Team
+        fields = ["tournament_id"]
 
 
 class TournamentFilterSet(django_filters.FilterSet):
@@ -33,30 +56,52 @@ class TournamentFilterSet(django_filters.FilterSet):
 
 class MatchFilterSet(django_filters.FilterSet):
     tournament_id = django_filters.NumberFilter(field_name="tournament_id")
+    status = django_filters.ChoiceFilter(choices=Match.STATUS_CHOICES)
 
     class Meta:
         model = Match
-        fields = ["tournament_id"]
+        fields = ["tournament_id", "status"]
 
 
 class UserViewSet(ReadOnlyModelViewSet):
     queryset = User.objects.all().order_by("-elo")
-    serializer_class = UserSerializer
+    serializer_class = UserResponseSerializer
     permission_classes = [AllowAny]
+    filterset_class = UserFilterSet
+
+    def filter_queryset(self, queryset):
+        if self.request.query_params.get("role") and (
+            not self.request.user.is_authenticated
+            or getattr(self.request.user, "role", None) != "admin"
+        ):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Only admins can filter by role.")
+        return super().filter_queryset(queryset)
 
 
 class TeamViewSet(ModelViewSet):
     queryset = Team.objects.all().order_by("name")
-    serializer_class = TeamSerializer
+    filterset_class = TeamFilterSet
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return TeamCreateSerializer
+        if self.action == "list":
+            return TeamListSerializer
+        return TeamResponseSerializer
 
     def get_permissions(self):
         if self.action == "create":
             return [IsAuthenticated()]
         return [AllowAny()]
 
-    def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+    def create(self, request, *args, **kwargs):
+        in_serializer = TeamCreateSerializer(data=request.data)
+        in_serializer.is_valid(raise_exception=True)
+        team = in_serializer.save(owner=request.user)
+        out_serializer = TeamResponseSerializer(team)
+        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class TeamMemberViewSet(ModelViewSet):
@@ -65,9 +110,15 @@ class TeamMemberViewSet(ModelViewSet):
 
 
 class TournamentViewSet(ModelViewSet):
-    serializer_class = TournamentSerializer
     filterset_class = TournamentFilterSet
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return TournamentCreateSerializer
+        if self.action == "list":
+            return TournamentListSerializer
+        return TournamentResponseSerializer
 
     def get_queryset(self):
         qs = Tournament.objects.all().order_by("start_date")
@@ -81,8 +132,12 @@ class TournamentViewSet(ModelViewSet):
             return [IsAdminRole()]
         return [AllowAny()]
 
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+    def create(self, request, *args, **kwargs):
+        in_serializer = TournamentCreateSerializer(data=request.data)
+        in_serializer.is_valid(raise_exception=True)
+        tournament = in_serializer.save(created_by=request.user)
+        out_serializer = TournamentResponseSerializer(tournament)
+        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class TournamentTeamViewSet(ModelViewSet):
@@ -91,9 +146,14 @@ class TournamentTeamViewSet(ModelViewSet):
 
 
 class MatchViewSet(ModelViewSet):
-    serializer_class = MatchSerializer
     filterset_class = MatchFilterSet
+    pagination_class = MatchCursorPagination
     http_method_names = ["get", "post", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return MatchListSerializer
+        return MatchResponseSerializer
 
     def get_queryset(self):
         return Match.objects.all().order_by("-played_at")
@@ -132,4 +192,4 @@ class MatchViewSet(ModelViewSet):
         match.save()
 
         response_status = status.HTTP_200_OK if is_overwrite else status.HTTP_201_CREATED
-        return Response(MatchSerializer(match).data, status=response_status)
+        return Response(MatchResponseSerializer(match).data, status=response_status)
