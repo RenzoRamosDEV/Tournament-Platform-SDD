@@ -9,7 +9,8 @@ Tournaments with `status="draft"` SHALL be included in results only for users wi
 `role` of `admin` or `organizer`.
 The endpoint SHALL accept an optional `?status=` query parameter to filter results.
 Valid values for `?status=` are: `draft`, `open`, `ongoing`, `finished`.
-An invalid `?status=` value SHALL return `400 Bad Request`.
+An invalid `?status=` value SHALL return `400 Bad Request` with a body identifying the
+field and listing the accepted values.
 Each tournament object SHALL include: `id`, `name`, `status`, `format`, `max_teams`,
 `start_date`, `end_date`, `created_by`.
 

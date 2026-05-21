@@ -3,6 +3,9 @@
 ### Requirement: List teams
 The system SHALL expose `GET /api/teams/` returning a paginated list of all teams.
 The endpoint SHALL be publicly accessible without authentication.
+The endpoint SHALL accept an optional `?tournament_id=` query parameter to filter results
+to teams registered in that tournament. If the given `tournament_id` references a
+non-existent tournament, the response SHALL be `200 OK` with an empty `results` list.
 Each team object SHALL include: `id`, `name`, `owner` (user id), `created_at`.
 
 #### Scenario: Public access returns paginated teams
@@ -12,6 +15,14 @@ Each team object SHALL include: `id`, `name`, `owner` (user id), `created_at`.
 #### Scenario: Response fields are correct
 - **WHEN** a client sends `GET /api/teams/`
 - **THEN** each object in `results` contains `id`, `name`, `owner`, `created_at`
+
+#### Scenario: Filter by existing tournament
+- **WHEN** a client sends `GET /api/teams/?tournament_id=2`
+- **THEN** the response contains only teams registered in tournament 2
+
+#### Scenario: Filter by non-existent tournament returns empty list
+- **WHEN** a client sends `GET /api/teams/?tournament_id=9999` and tournament 9999 does not exist
+- **THEN** the response status is `200 OK` and `results` is an empty array
 
 ### Requirement: Create team
 The system SHALL expose `POST /api/teams/` allowing any authenticated user to create a team.
