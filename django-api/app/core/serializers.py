@@ -6,15 +6,15 @@ from core.models import Match, Team, TeamMember, Tournament, TournamentTeam, Use
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "username", "role", "elo", "is_active", "created_at")
-        read_only_fields = ("id", "elo", "created_at")
+        fields = ("id", "username", "email", "role", "elo", "avatar_url", "created_at")
+        read_only_fields = ("id", "email", "elo", "avatar_url", "created_at")
 
 
 class TeamSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
         fields = ("id", "name", "owner", "created_at")
-        read_only_fields = ("id", "created_at")
+        read_only_fields = ("id", "owner", "created_at")
 
 
 class TeamMemberSerializer(serializers.ModelSerializer):
@@ -27,8 +27,15 @@ class TeamMemberSerializer(serializers.ModelSerializer):
 class TournamentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tournament
-        fields = ("id", "name", "status", "format", "max_teams", "start_date", "end_date")
-        read_only_fields = ("id",)
+        fields = ("id", "name", "status", "format", "max_teams", "start_date", "end_date", "created_by")
+        read_only_fields = ("id", "created_by")
+
+    def validate(self, data):
+        start = data.get("start_date") or (self.instance.start_date if self.instance else None)
+        end = data.get("end_date") or (self.instance.end_date if self.instance else None)
+        if start and end and end < start:
+            raise serializers.ValidationError({"end_date": "end_date must be >= start_date."})
+        return data
 
 
 class TournamentTeamSerializer(serializers.ModelSerializer):
@@ -58,3 +65,17 @@ class MatchSerializer(serializers.ModelSerializer):
                 {"winner_team": "winner_team must be team_a or team_b."}
             )
         return data
+
+
+class MatchReportSerializer(serializers.Serializer):
+    winner_id = serializers.IntegerField()
+    score_team_a = serializers.IntegerField(min_value=0)
+    score_team_b = serializers.IntegerField(min_value=0)
+
+    def validate_winner_id(self, value):
+        match = self.context.get("match")
+        if match and value not in (match.team_a_id, match.team_b_id):
+            raise serializers.ValidationError(
+                "winner_id must be the id of team_a or team_b of this match."
+            )
+        return value
