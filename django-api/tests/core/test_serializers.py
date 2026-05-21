@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from core.models import Match, Team, TeamMember, Tournament, TournamentTeam, User
 from core.serializers import (
+    MatchReportSerializer,
     MatchSerializer,
     TeamMemberSerializer,
     TeamSerializer,
@@ -14,7 +15,9 @@ from core.serializers import (
 
 
 def make_user(username="u"):
-    return User.objects.create_user(username=username, password="secret", role="player")
+    return User.objects.create_user(
+        username=username, password="secret", email=f"{username}@test.com", role="player"
+    )
 
 
 def make_team(name="T", owner=None):
@@ -23,13 +26,25 @@ def make_team(name="T", owner=None):
     return Team.objects.create(name=name, owner=owner)
 
 
-def make_tournament():
+_tourney_counter = 0
+
+
+def make_tournament(name="Cup"):
+    global _tourney_counter
+    _tourney_counter += 1
+    creator = User.objects.create_user(
+        username=f"creator_{_tourney_counter}",
+        password="x",
+        email=f"creator{_tourney_counter}@x.com",
+        role="organizer",
+    )
     return Tournament.objects.create(
-        name="Cup",
-        format="single_elim",
+        name=name,
+        format="single_elimination",
         max_teams=8,
         start_date=datetime.date(2026, 1, 1),
         end_date=datetime.date(2026, 1, 10),
+        created_by=creator,
     )
 
 
@@ -241,8 +256,178 @@ class MatchSerializerTest(TestCase):
             "tournament": self.tournament.id,
             "team_a": self.ta.id,
             "team_b": self.tb.id,
-            "status": "pending",
+            "status": "scheduled",
             "score_a": 0,
             "score_b": 0,
         })
         self.assertTrue(s.is_valid(), s.errors)
+
+
+# ---------------------------------------------------------------------------
+# New API serializer tests (TDD: written before implementation)
+# ---------------------------------------------------------------------------
+
+class UserSerializerApiFieldsTest(TestCase):
+    """UserSerializer must expose email and avatar_url for the API."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="apiuser",
+            password="secret",
+            email="api@example.com",
+            role="player",
+        )
+
+    def test_email_in_output(self):
+        data = UserSerializer(self.user).data
+        self.assertIn("email", data)
+
+    def test_avatar_url_in_output(self):
+        data = UserSerializer(self.user).data
+        self.assertIn("avatar_url", data)
+
+    def test_all_required_api_fields_present(self):
+        data = UserSerializer(self.user).data
+        for field in ("id", "username", "email", "role", "elo", "avatar_url", "created_at"):
+            self.assertIn(field, data, f"Missing field: {field}")
+
+    def test_email_value_correct(self):
+        data = UserSerializer(self.user).data
+        self.assertEqual(data["email"], "api@example.com")
+
+
+class TeamSerializerOwnerReadOnlyTest(TestCase):
+    """owner field must be read-only — clients cannot set it via input data."""
+
+    def setUp(self):
+        self.owner = User.objects.create_user(username="own2", password="x", email="own2@x.com")
+
+    def test_owner_is_read_only(self):
+        s = TeamSerializer(data={"name": "Beta", "owner": self.owner.id})
+        self.assertTrue(s.is_valid(), s.errors)
+        self.assertNotIn("owner", s.validated_data)
+
+    def test_owner_present_in_serialized_output(self):
+        team = Team.objects.create(name="Gamma", owner=self.owner)
+        data = TeamSerializer(team).data
+        self.assertIn("owner", data)
+        self.assertEqual(data["owner"], self.owner.id)
+
+
+class TournamentSerializerApiFieldsTest(TestCase):
+    """TournamentSerializer must expose created_by and validate end_date >= start_date."""
+
+    def setUp(self):
+        self.creator = User.objects.create_user(
+            username="org1", password="x", email="org1@x.com", role="organizer"
+        )
+
+    def test_created_by_in_output(self):
+        t = Tournament.objects.create(
+            name="Cup",
+            format="round_robin",
+            max_teams=8,
+            start_date=datetime.date(2026, 6, 1),
+            end_date=datetime.date(2026, 6, 30),
+            created_by=self.creator,
+        )
+        data = TournamentSerializer(t).data
+        self.assertIn("created_by", data)
+
+    def test_all_required_api_fields_present(self):
+        t = Tournament.objects.create(
+            name="Cup2",
+            format="single_elimination",
+            max_teams=4,
+            start_date=datetime.date(2026, 7, 1),
+            end_date=datetime.date(2026, 7, 10),
+            created_by=self.creator,
+        )
+        data = TournamentSerializer(t).data
+        for field in ("id", "name", "status", "format", "max_teams", "start_date", "end_date", "created_by"):
+            self.assertIn(field, data, f"Missing field: {field}")
+
+    def test_end_date_before_start_date_invalid(self):
+        s = TournamentSerializer(data={
+            "name": "Bad Cup",
+            "format": "round_robin",
+            "max_teams": 8,
+            "start_date": "2026-06-30",
+            "end_date": "2026-06-01",
+        })
+        self.assertFalse(s.is_valid())
+        self.assertIn("end_date", s.errors)
+
+    def test_end_date_equal_start_date_valid(self):
+        s = TournamentSerializer(data={
+            "name": "One Day Cup",
+            "format": "round_robin",
+            "max_teams": 4,
+            "start_date": "2026-06-15",
+            "end_date": "2026-06-15",
+        })
+        self.assertTrue(s.is_valid(), s.errors)
+
+
+class MatchReportSerializerTest(TestCase):
+    """MatchReportSerializer validates winner_id, score_team_a, score_team_b."""
+
+    def setUp(self):
+        owner_a = User.objects.create_user(username="oa", password="x", email="oa@x.com")
+        owner_b = User.objects.create_user(username="ob", password="x", email="ob@x.com")
+        self.ta = Team.objects.create(name="RA", owner=owner_a)
+        self.tb = Team.objects.create(name="RB", owner=owner_b)
+        creator = User.objects.create_user(username="cr", password="x", email="cr@x.com")
+        self.tournament = Tournament.objects.create(
+            name="RC",
+            format="round_robin",
+            max_teams=4,
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 10),
+            created_by=creator,
+        )
+        self.match = Match.objects.create(
+            tournament=self.tournament,
+            team_a=self.ta,
+            team_b=self.tb,
+        )
+
+    def test_valid_winner_team_a(self):
+        s = MatchReportSerializer(
+            data={"winner_id": self.ta.id, "score_team_a": 3, "score_team_b": 1},
+            context={"match": self.match},
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_valid_winner_team_b(self):
+        s = MatchReportSerializer(
+            data={"winner_id": self.tb.id, "score_team_a": 0, "score_team_b": 2},
+            context={"match": self.match},
+        )
+        self.assertTrue(s.is_valid(), s.errors)
+
+    def test_invalid_winner_not_in_match(self):
+        other_owner = User.objects.create_user(username="ox", password="x", email="ox@x.com")
+        other = Team.objects.create(name="Other", owner=other_owner)
+        s = MatchReportSerializer(
+            data={"winner_id": other.id, "score_team_a": 1, "score_team_b": 0},
+            context={"match": self.match},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("winner_id", s.errors)
+
+    def test_missing_winner_id_invalid(self):
+        s = MatchReportSerializer(
+            data={"score_team_a": 1, "score_team_b": 0},
+            context={"match": self.match},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("winner_id", s.errors)
+
+    def test_negative_score_invalid(self):
+        s = MatchReportSerializer(
+            data={"winner_id": self.ta.id, "score_team_a": -1, "score_team_b": 0},
+            context={"match": self.match},
+        )
+        self.assertFalse(s.is_valid())
+        self.assertIn("score_team_a", s.errors)
