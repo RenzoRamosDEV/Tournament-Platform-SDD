@@ -5,6 +5,7 @@ import com.tournament.auth.dto.*;
 import com.tournament.auth.exception.EmailAlreadyExistsException;
 import com.tournament.auth.exception.InvalidCredentialsException;
 import com.tournament.auth.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -15,15 +16,18 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final long accessTokenExpirationSeconds;
 
     public UserService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
-                       RefreshTokenService refreshTokenService) {
+                       RefreshTokenService refreshTokenService,
+                       @Value("${jwt.access-token-expiration-seconds:900}") long accessTokenExpirationSeconds) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.refreshTokenService = refreshTokenService;
+        this.accessTokenExpirationSeconds = accessTokenExpirationSeconds;
     }
 
     public RegisterResponse register(String email, String password, String role, String username) {
@@ -47,6 +51,6 @@ public class UserService {
         }
         String accessToken = jwtService.generateAccessToken(user);
         String refreshToken = refreshTokenService.createRefreshToken(user).getToken().toString();
-        return new LoginResponse(accessToken, refreshToken, "Bearer", 86400);
+        return new LoginResponse(accessToken, refreshToken, "Bearer", accessTokenExpirationSeconds);
     }
 }
