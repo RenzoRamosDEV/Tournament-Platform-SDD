@@ -43,7 +43,7 @@ class LoginControllerTest {
                 .andExpect(jsonPath("$.access_token").isNotEmpty())
                 .andExpect(jsonPath("$.refresh_token").isNotEmpty())
                 .andExpect(jsonPath("$.token_type").value("Bearer"))
-                .andExpect(jsonPath("$.expires_in").value(86400));
+                .andExpect(jsonPath("$.expires_in").value(900));
     }
 
     @Test
