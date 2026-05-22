@@ -6,6 +6,7 @@ import com.tournament.auth.service.RefreshTokenService;
 import com.tournament.auth.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -43,5 +44,11 @@ public class AuthController {
     @PostMapping("/validate")
     public ValidateResponse validate(@Valid @RequestBody ValidateRequest req) {
         return jwtService.validate(req.token());
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest req) {
+        refreshTokenService.logout(req.refreshToken());
+        return ResponseEntity.noContent().build();
     }
 }
