@@ -5,9 +5,12 @@
 .vscode
 .agents
 
+# Environment
+.env
+
 # APM dependencies
 apm_modules/
 .mcp.json
 apm.lock.yaml
 apm.yml
-opencode.json
+opencode.json.serena/

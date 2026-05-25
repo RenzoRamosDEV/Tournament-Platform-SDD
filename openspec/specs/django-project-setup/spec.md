@@ -26,16 +26,26 @@ The system SHALL be initialized with `django-admin startproject tournament_api` 
 - **THEN** the response does NOT include an `Access-Control-Allow-Origin` header
 
 ### Requirement: DRF global configuration
-Django REST Framework SHALL be installed (`rest_framework` in `INSTALLED_APPS`) with the following defaults set in `REST_FRAMEWORK`:
-- `DEFAULT_AUTHENTICATION_CLASSES`: `['core.authentication.JavaJWTAuthentication']`
-- `DEFAULT_PERMISSION_CLASSES`: `['rest_framework.permissions.IsAuthenticated']`
-- `DEFAULT_PAGINATION_CLASS`: `'rest_framework.pagination.PageNumberPagination'`
-- `PAGE_SIZE`: integer read from the `PAGE_SIZE` environment variable, defaulting to `20`
+Django REST Framework SHALL be installed (`rest_framework` in `INSTALLED_APPS`). The `REST_FRAMEWORK` settings dict SHALL have `DEFAULT_AUTHENTICATION_CLASSES` set to `['apps.users.authentication.BearerHeaderAuthentication']` (a header-only class that enables `401` responses — actual auth is delegated to `JwtAuthMiddleware`). `DEFAULT_PERMISSION_CLASSES`, `DEFAULT_PAGINATION_CLASS`, `PAGE_SIZE`, and other DRF settings are unchanged.
 
 #### Scenario: Unauthenticated request is rejected by default
-- **WHEN** a request with no `Authorization` header reaches any DRF view
+- **WHEN** a request with no `Authorization` header reaches any DRF view requiring authentication
 - **THEN** the response status is `401 Unauthorized`
 
 #### Scenario: PAGE_SIZE is configurable
 - **WHEN** `PAGE_SIZE=50` is set in the environment
 - **THEN** `settings.REST_FRAMEWORK['PAGE_SIZE']` equals `50`
+
+### Requirement: AUTH_SERVICE_URL setting
+`settings.py` SHALL define `AUTH_SERVICE_URL` read from the `AUTH_SERVICE_URL` environment variable with a default of `http://java-auth:8080`. The middleware MUST use this setting — the URL MUST NOT be hardcoded.
+
+#### Scenario: AUTH_SERVICE_URL is configurable
+- **WHEN** `AUTH_SERVICE_URL=http://localhost:8080` is set in the environment
+- **THEN** `settings.AUTH_SERVICE_URL` equals `http://localhost:8080`
+
+### Requirement: JwtAuthMiddleware wired into MIDDLEWARE
+`JwtAuthMiddleware` (at `app.middleware.jwt_auth.JwtAuthMiddleware`) SHALL be added to `MIDDLEWARE` immediately after `CorsMiddleware`. Authentication via `djangorestframework-simplejwt` is not used.
+
+#### Scenario: Middleware is active
+- **WHEN** Django starts
+- **THEN** `JwtAuthMiddleware` appears in the active middleware chain immediately after `CorsMiddleware`
