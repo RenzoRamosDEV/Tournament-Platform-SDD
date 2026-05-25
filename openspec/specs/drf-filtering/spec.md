@@ -1,45 +1,42 @@
 ## ADDED Requirements
 
-### Requirement: Global django-filter backend
-The system SHALL register `DjangoFilterBackend` as the sole entry in `DEFAULT_FILTER_BACKENDS`
-within `REST_FRAMEWORK`. Each viewset that supports filtering SHALL declare a `filterset_class`
-pointing to a custom `FilterSet` subclass.
+### Requirement: Date range filtering on list endpoints
+The `GET /api/tournaments/` and `GET /api/matches/` endpoints SHALL support date range filtering via `date_from` and `date_to` query parameters (ISO-8601 date format: `YYYY-MM-DD`). When provided, results MUST be filtered to objects whose relevant date field falls within the specified range (inclusive). Invalid date formats MUST return `HTTP 400 Bad Request`.
 
-#### Scenario: Filter backend is active on filtered endpoint
-- **WHEN** a client sends `GET /api/tournaments/?status=open`
-- **THEN** the response contains only tournaments with `status="open"`
+#### Scenario: Tournament date range filter
+- **WHEN** a client sends `GET /api/tournaments/?date_from=2024-01-01&date_to=2024-06-30`
+- **THEN** the response contains only tournaments whose start date falls between 2024-01-01 and 2024-06-30 (inclusive)
 
-### Requirement: Strict status filter validation
-For every endpoint that exposes a `?status=` filter, the system SHALL reject values outside
-the allowed set with `HTTP 400 Bad Request`. The response body SHALL identify the field name
-and list the accepted values. The system SHALL NOT return `HTTP 200` with an empty list for
-an invalid status value.
+#### Scenario: Invalid date format returns 400
+- **WHEN** a client sends `GET /api/tournaments/?date_from=not-a-date`
+- **THEN** the response is `HTTP 400 Bad Request` with a structured error body identifying the invalid parameter
 
-Allowed values per endpoint:
-- `GET /api/tournaments/` → `draft`, `open`, `in_progress`, `closed`
-- `GET /api/matches/` → `scheduled`, `ongoing`, `finished`
+### Requirement: Owner/creator ID filtering
+The `GET /api/tournaments/` endpoint SHALL support filtering by `created_by` (integer user ID) query parameter. Results MUST be limited to tournaments created by the specified user. A non-existent user ID MUST return `HTTP 200` with an empty result list.
 
-#### Scenario: Invalid tournament status returns 400
-- **WHEN** a client sends `GET /api/tournaments/?status=cancelled`
-- **THEN** the response status is `400 Bad Request` and the body names the `status` field and lists `draft`, `open`, `in_progress`, `closed`
+#### Scenario: Filter tournaments by creator
+- **WHEN** a client sends `GET /api/tournaments/?created_by=5`
+- **THEN** the response contains only tournaments where `created_by_id = 5`
 
-#### Scenario: Invalid match status returns 400
-- **WHEN** a client sends `GET /api/matches/?status=postponed`
-- **THEN** the response status is `400 Bad Request` and the body names the `status` field and lists `scheduled`, `ongoing`, `finished`
+#### Scenario: Non-existent creator ID returns empty list
+- **WHEN** a client sends `GET /api/tournaments/?created_by=99999` and user 99999 does not exist
+- **THEN** the response is `HTTP 200` with `results: []`
 
-#### Scenario: Valid status returns 200
-- **WHEN** a client sends `GET /api/matches/?status=ongoing`
-- **THEN** the response status is `200 OK` and all objects in `results` have `status="ongoing"`
+## MODIFIED Requirements
 
 ### Requirement: Per-endpoint filter field matrix
-The system SHALL expose filter fields only as specified below. Endpoints not listed SHALL NOT
-expose any filter parameters.
+The system SHALL expose filter fields only as specified below. Endpoints not listed SHALL NOT expose any filter parameters.
 
 | Endpoint | Field | Type | Validation |
 |---|---|---|---|
 | `GET /api/tournaments/` | `status` | choice | `draft`, `open`, `in_progress`, `closed` → 400 on invalid |
+| `GET /api/tournaments/` | `date_from` | date | ISO-8601 `YYYY-MM-DD` → 400 on invalid format |
+| `GET /api/tournaments/` | `date_to` | date | ISO-8601 `YYYY-MM-DD` → 400 on invalid format |
+| `GET /api/tournaments/` | `created_by` | integer FK | non-existent ID → 200 empty list |
 | `GET /api/matches/` | `tournament_id` | integer FK | non-existent ID → 200 empty list |
 | `GET /api/matches/` | `status` | choice | `scheduled`, `ongoing`, `finished` → 400 on invalid |
+| `GET /api/matches/` | `date_from` | date | ISO-8601 `YYYY-MM-DD` → 400 on invalid format |
+| `GET /api/matches/` | `date_to` | date | ISO-8601 `YYYY-MM-DD` → 400 on invalid format |
 | `GET /api/teams/` | `tournament_id` | integer FK | non-existent ID → 200 empty list |
 | `GET /api/users/` | `role` | choice | allowed values from `User.role` choices → 400 on invalid; endpoint is admin-only |
 | `GET /api/rankings/` | `tournament_id` | integer FK | non-existent ID → 200 empty list |
