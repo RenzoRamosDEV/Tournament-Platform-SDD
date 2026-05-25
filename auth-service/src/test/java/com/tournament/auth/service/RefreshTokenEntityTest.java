@@ -16,17 +16,20 @@ class RefreshTokenEntityTest {
         User user = new User();
         user.setId(UUID.randomUUID());
 
-        UUID token = UUID.randomUUID();
+        String tokenHash = "abc123hash";
+        UUID familyId = UUID.randomUUID();
         LocalDateTime expiresAt = LocalDateTime.now().plusDays(7);
 
         RefreshToken rt = new RefreshToken();
         rt.setUser(user);
-        rt.setToken(token);
+        rt.setTokenHash(tokenHash);
+        rt.setFamilyId(familyId);
         rt.setExpiresAt(expiresAt);
         rt.setRevoked(false);
 
         assertThat(rt.getUser()).isEqualTo(user);
-        assertThat(rt.getToken()).isEqualTo(token);
+        assertThat(rt.getTokenHash()).isEqualTo(tokenHash);
+        assertThat(rt.getFamilyId()).isEqualTo(familyId);
         assertThat(rt.getExpiresAt()).isEqualTo(expiresAt);
         assertThat(rt.isRevoked()).isFalse();
     }
