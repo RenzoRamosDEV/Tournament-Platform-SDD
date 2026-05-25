@@ -20,7 +20,7 @@ class TeamFilterSet(django_filters.FilterSet):
 
 
 class TeamViewSet(ModelViewSet):
-    queryset = Team.objects.all().order_by("name")
+    queryset = Team.objects.prefetch_related("tournamentteam_set", "teammember_set").all().order_by("name")
     filterset_class = TeamFilterSet
     http_method_names = ["get", "post", "head", "options"]
 

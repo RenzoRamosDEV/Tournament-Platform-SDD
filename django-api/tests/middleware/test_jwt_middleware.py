@@ -108,6 +108,23 @@ class JwtAuthMiddlewareTest(TestCase):
         body = json.loads(response.content)
         self.assertEqual(body["error"], "AUTH_SERVICE_UNAVAILABLE")
 
+    # --- Unexpected exceptions (OSError, etc.) ---
+
+    @patch("app.middleware.jwt_auth.requests.post", side_effect=OSError("network down"))
+    def test_unexpected_exception_returns_503(self, _):
+        request = self.factory.get("/api/users/", HTTP_AUTHORIZATION="Bearer sometoken")
+        response = make_middleware()(request)
+        self.assertEqual(response.status_code, 503)
+        body = json.loads(response.content)
+        self.assertEqual(body["error"], "AUTH_SERVICE_UNAVAILABLE")
+
+    @patch("app.middleware.jwt_auth.requests.post", side_effect=RuntimeError("unexpected"))
+    def test_runtime_error_never_reaches_500(self, _):
+        request = self.factory.get("/api/users/", HTTP_AUTHORIZATION="Bearer sometoken")
+        response = make_middleware()(request)
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 503)
+
     # --- Bearer scheme case-insensitive ---
 
     @patch("app.middleware.jwt_auth.requests.post")

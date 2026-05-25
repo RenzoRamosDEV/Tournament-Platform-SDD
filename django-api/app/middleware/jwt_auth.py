@@ -34,6 +34,12 @@ class JwtAuthMiddleware:
                  "message": "Authentication service is currently unavailable."},
                 status=503,
             )
+        except Exception:
+            return JsonResponse(
+                {"error": "AUTH_SERVICE_UNAVAILABLE",
+                 "message": "Authentication service is currently unavailable."},
+                status=503,
+            )
 
         if resp.status_code >= 500:
             return JsonResponse(

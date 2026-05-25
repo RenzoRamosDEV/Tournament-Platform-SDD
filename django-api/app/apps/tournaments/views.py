@@ -1,5 +1,4 @@
 import django_filters
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -21,19 +20,24 @@ from common.permissions import IsAdminRole
 
 class TournamentFilterSet(django_filters.FilterSet):
     status = django_filters.ChoiceFilter(choices=Tournament.STATUS_CHOICES)
+    date_from = django_filters.DateFilter(field_name="start_date", lookup_expr="gte")
+    date_to = django_filters.DateFilter(field_name="start_date", lookup_expr="lte")
+    created_by = django_filters.NumberFilter(field_name="created_by_id")
 
     class Meta:
         model = Tournament
-        fields = ["status"]
+        fields = ["status", "date_from", "date_to", "created_by"]
 
 
 class MatchFilterSet(django_filters.FilterSet):
     tournament_id = django_filters.NumberFilter(field_name="tournament_id")
     status = django_filters.ChoiceFilter(choices=Match.STATUS_CHOICES)
+    date_from = django_filters.DateFilter(field_name="played_at", lookup_expr="date__gte")
+    date_to = django_filters.DateFilter(field_name="played_at", lookup_expr="date__lte")
 
     class Meta:
         model = Match
-        fields = ["tournament_id", "status"]
+        fields = ["tournament_id", "status", "date_from", "date_to"]
 
 
 class TournamentViewSet(ModelViewSet):
@@ -48,7 +52,7 @@ class TournamentViewSet(ModelViewSet):
         return TournamentResponseSerializer
 
     def get_queryset(self):
-        qs = Tournament.objects.all().order_by("start_date")
+        qs = Tournament.objects.prefetch_related("tournamentteam_set").all().order_by("start_date")
         user = self.request.user
         if user.is_authenticated and getattr(user, "role", None) in ("admin", "organizer"):
             return qs
@@ -83,7 +87,7 @@ class MatchViewSet(ModelViewSet):
         return MatchResponseSerializer
 
     def get_queryset(self):
-        return Match.objects.all().order_by("-played_at")
+        return Match.objects.select_related("tournament").prefetch_related("team_a", "team_b").all().order_by("-played_at")
 
     def get_permissions(self):
         if self.action == "report":
@@ -92,16 +96,12 @@ class MatchViewSet(ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="report", url_name="report")
     def report(self, request, pk=None):
+        from apps.tournaments.services import MatchService, MatchAlreadyFinished
+
         try:
             match = Match.objects.get(pk=pk)
         except Match.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-
-        if match.status == "finished" and request.user.role != "admin":
-            return Response(
-                {"detail": "Match result already reported."},
-                status=status.HTTP_409_CONFLICT,
-            )
 
         serializer = MatchReportSerializer(
             data=request.data, context={"match": match}
@@ -110,13 +110,19 @@ class MatchViewSet(ModelViewSet):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         vd = serializer.validated_data
+        is_admin = getattr(request.user, "role", None) == "admin"
         is_overwrite = match.status == "finished"
-        match.winner_team_id = vd["winner_id"]
-        match.score_a = vd["score_team_a"]
-        match.score_b = vd["score_team_b"]
-        match.status = "finished"
-        match.played_at = timezone.now()
-        match.save()
+
+        try:
+            match = MatchService.report_result(
+                match.id, vd["winner_id"], vd["score_team_a"], vd["score_team_b"],
+                is_admin=is_admin,
+            )
+        except MatchAlreadyFinished:
+            return Response(
+                {"detail": "Match result already reported."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         response_status = status.HTTP_200_OK if is_overwrite else status.HTTP_201_CREATED
         return Response(MatchResponseSerializer(match).data, status=response_status)

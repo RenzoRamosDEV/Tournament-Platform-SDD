@@ -88,17 +88,18 @@ class AuthFlowIntegrationTest {
         Map<?, ?> refreshBody = mapper.readValue(refreshResult.getResponse().getContentAsString(), Map.class);
         String newRefreshToken = (String) refreshBody.get("refresh_token");
 
-        // reuse the original (now revoked) token — must be rejected
+        // reuse the original (now revoked) token — triggers family revocation
         mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("refresh_token", originalRefreshToken))))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("INVALID_REFRESH_TOKEN"));
 
-        // new token should still work
+        // new token should also be revoked due to family revocation
         mvc.perform(post("/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(mapper.writeValueAsString(Map.of("refresh_token", newRefreshToken))))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("INVALID_REFRESH_TOKEN"));
     }
 }

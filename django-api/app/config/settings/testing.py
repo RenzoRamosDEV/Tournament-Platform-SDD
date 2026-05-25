@@ -12,3 +12,20 @@ DATABASES = {
         "NAME": ":memory:",
     }
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
+
+# Keep throttle classes active so APIView.throttle_classes is set at import time.
+# Use a very high rate so normal tests are never throttled.
+# Throttle-specific tests override DEFAULT_THROTTLE_RATES via @override_settings.
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "10000/min",
+        "user": "10000/min",
+    },
+}
