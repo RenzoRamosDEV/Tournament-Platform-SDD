@@ -30,56 +30,61 @@ public class RefreshTokenService {
         this.accessTokenExpirationSeconds = accessTokenExpirationSeconds;
     }
 
-    public RefreshToken createRefreshToken(User user) {
+    public String createRefreshToken(User user) {
+        return createRefreshToken(user, UUID.randomUUID());
+    }
+
+    private String createRefreshToken(User user, UUID familyId) {
+        String rawToken = UUID.randomUUID().toString();
+        String tokenHash = HashUtil.sha256(rawToken);
+
         RefreshToken rt = new RefreshToken();
         rt.setUser(user);
-        rt.setToken(UUID.randomUUID());
+        rt.setTokenHash(tokenHash);
+        rt.setFamilyId(familyId);
         rt.setExpiresAt(LocalDateTime.now().plusDays(refreshTokenExpirationDays));
         rt.setRevoked(false);
-        return refreshTokenRepository.save(rt);
+        refreshTokenRepository.save(rt);
+
+        return rawToken;
     }
 
     @Transactional
-    public LoginResponse rotate(String tokenString) {
-        UUID tokenUuid;
-        try {
-            tokenUuid = UUID.fromString(tokenString);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidRefreshTokenException();
-        }
+    public LoginResponse rotate(String rawToken) {
+        String tokenHash = HashUtil.sha256(rawToken);
 
-        RefreshToken existing = refreshTokenRepository.findByToken(tokenUuid)
+        RefreshToken existing = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(InvalidRefreshTokenException::new);
 
-        if (existing.isRevoked() || existing.isExpired()) {
+        if (existing.isRevoked()) {
+            refreshTokenRepository.revokeAllByFamilyId(existing.getFamilyId());
             throw new InvalidRefreshTokenException();
         }
 
-        refreshTokenRepository.revokeByToken(tokenUuid);
+        if (existing.isExpired()) {
+            throw new InvalidRefreshTokenException();
+        }
+
+        refreshTokenRepository.revokeByTokenHash(tokenHash);
 
         User user = existing.getUser();
-        RefreshToken newToken = createRefreshToken(user);
+        String newRawToken = createRefreshToken(user, existing.getFamilyId());
         String accessToken = jwtService.generateAccessToken(user);
 
-        return new LoginResponse(accessToken, newToken.getToken().toString(), "Bearer", accessTokenExpirationSeconds);
+        return new LoginResponse(accessToken, newRawToken, "Bearer", accessTokenExpirationSeconds);
     }
 
     @Transactional
-    public void logout(String tokenString) {
-        UUID tokenUuid;
-        try {
-            tokenUuid = UUID.fromString(tokenString);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidRefreshTokenException();
-        }
+    public void logout(String rawToken) {
+        String tokenHash = HashUtil.sha256(rawToken);
 
-        RefreshToken existing = refreshTokenRepository.findByToken(tokenUuid)
+        RefreshToken existing = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(InvalidRefreshTokenException::new);
 
         if (existing.isRevoked() || existing.isExpired()) {
             throw new InvalidRefreshTokenException();
         }
 
-        refreshTokenRepository.revokeByToken(tokenUuid);
+        refreshTokenRepository.revokeByTokenHash(tokenHash);
     }
 }

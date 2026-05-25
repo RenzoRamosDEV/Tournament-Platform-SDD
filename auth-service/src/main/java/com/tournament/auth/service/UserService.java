@@ -50,7 +50,7 @@ public class UserService {
             throw new InvalidCredentialsException();
         }
         String accessToken = jwtService.generateAccessToken(user);
-        String refreshToken = refreshTokenService.createRefreshToken(user).getToken().toString();
+        String refreshToken = refreshTokenService.createRefreshToken(user);
         return new LoginResponse(accessToken, refreshToken, "Bearer", accessTokenExpirationSeconds);
     }
 }
