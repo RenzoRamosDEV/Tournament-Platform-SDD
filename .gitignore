@@ -5,6 +5,9 @@
 .vscode
 .agents
 
+# Environment
+.env
+
 # APM dependencies
 apm_modules/
 .mcp.json
