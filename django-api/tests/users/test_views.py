@@ -145,6 +145,22 @@ class UserRoleFilterTest(TestCase):
 # Throttling & custom exception handler
 # ---------------------------------------------------------------------------
 
+from django.test import override_settings as _override_settings
+
+
+@_override_settings(REST_FRAMEWORK={
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {"anon": "100/min", "user": "100/min"},
+    "DEFAULT_AUTHENTICATION_CLASSES": ["apps.users.authentication.BearerHeaderAuthentication"],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+    "DEFAULT_PAGINATION_CLASS": "common.pagination.StandardPagination",
+    "PAGE_SIZE": 20,
+    "EXCEPTION_HANDLER": "common.exceptions.custom_exception_handler",
+})
 class ThrottleExceptionHandlerTest(TestCase):
     def setUp(self):
         self.url = reverse("user-list")
