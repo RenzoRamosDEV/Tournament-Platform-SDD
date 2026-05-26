@@ -7,6 +7,11 @@ MUTATION_TARGETS = {
     "app/apps/users/views.py",
     "app/apps/teams/views.py",
     "app/apps/tournaments/views.py",
+    "app/events/producer.py",
+    "app/events/consumer_base.py",
+    "app/consumers/ranking_consumer.py",
+    "app/consumers/notification_consumer.py",
+    "app/consumers/log_consumer.py",
 }
 
 
