@@ -42,3 +42,16 @@ When a team is created, the system SHALL publish a `team.created` event to Kafka
 #### Scenario: No event on transaction rollback
 - **WHEN** a team creation fails and the DB transaction rolls back
 - **THEN** no `team.created` event is produced
+
+## ADDED Requirements
+
+### Requirement: Team ELO field
+The system SHALL add an `elo` column (INTEGER, NOT NULL, DEFAULT 1000) to the `teams` table. All existing teams MUST receive the default value of 1000 via migration.
+
+#### Scenario: New team has default ELO
+- **WHEN** a `teams` row is inserted without specifying `elo`
+- **THEN** the row is persisted with `elo = 1000`
+
+#### Scenario: Existing teams receive default ELO on migration
+- **WHEN** the migration adding the `elo` column is applied to a database with existing teams
+- **THEN** all pre-existing team rows have `elo = 1000`

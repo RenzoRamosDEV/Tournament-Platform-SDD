@@ -13,7 +13,7 @@ The system SHALL persist a `matches` row with `tournament_id` (FK → `tournamen
 
 ### Requirement: ELO recalculation formula on match result
 When a match result is recorded, the system SHALL recalculate the ELO rating for both
-participating users using the standard Elo formula with K=32:
+participating **teams** (not individual users) using the standard Elo formula with K=32:
 
 ```
 expected = 1.0 / (1 + 10 ^ ((opponent_elo - player_elo) / 400.0))
@@ -21,20 +21,27 @@ new_elo   = ROUND(old_elo + 32 * (actual_result - expected))
 ```
 
 where `actual_result` is 1 for the winner and 0 for the loser. The resulting value MUST
-be stored as an integer (rounded, not truncated). Both users' ELO values MUST be updated
-atomically within the same database transaction as the `winner_team_id` update.
+be stored as an integer (rounded, not truncated). Both teams' ELO values MUST be updated
+atomically within the same database transaction using `SELECT FOR UPDATE` to prevent
+concurrent matches from reading stale ELO values. The update MUST be idempotent: if
+`EloHistory` rows already exist for the match, no ELO values are changed and no exception
+is raised.
 
 #### Scenario: Winner ELO increases after victory
-- **WHEN** user A (elo=1200) defeats user B (elo=1000) and the transaction commits
-- **THEN** user A's stored `elo` is greater than 1200
+- **WHEN** team A (elo=1200) defeats team B (elo=1000) and the transaction commits
+- **THEN** team A's stored `elo` is greater than 1200
 
 #### Scenario: Loser ELO decreases after defeat
-- **WHEN** user A (elo=1200) defeats user B (elo=1000) and the transaction commits
-- **THEN** user B's stored `elo` is less than 1000
+- **WHEN** team A (elo=1200) defeats team B (elo=1000) and the transaction commits
+- **THEN** team B's stored `elo` is less than 1000
 
 #### Scenario: ELO update is atomic with match result
-- **WHEN** the ELO update for user B fails after the `winner_team_id` update has been applied
+- **WHEN** the ELO update for team B fails after the `winner_team_id` update has been applied
 - **THEN** the entire transaction rolls back and `winner_team_id` remains unchanged
+
+#### Scenario: Duplicate ELO update is silently ignored
+- **WHEN** `update_elo(match)` is called for a match whose EloHistory already exists
+- **THEN** no team ELO values are changed and no exception is raised
 
 ### Requirement: Winner validation constraint
 The system SHALL enforce that `winner_team_id IS NULL OR winner_team_id = team_a_id OR winner_team_id = team_b_id` via a database CHECK constraint.
