@@ -7,3 +7,4 @@ django-cors-headers>=4.3
 django-filter>=24.0
 mutmut>=2.4
 gunicorn>=21.2
+confluent-kafka>=2.4
