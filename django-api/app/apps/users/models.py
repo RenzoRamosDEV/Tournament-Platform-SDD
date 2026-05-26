@@ -5,10 +5,20 @@ from django.utils import timezone
 
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password, role="player", elo=1000, **extra):
+        from django.db import transaction
+        import events.producer as _producer
+
         email = self.normalize_email(email)
         user = self.model(email=email, username=username, role=role, elo=elo, **extra)
         user.set_password(password)
         user.save(using=self._db)
+
+        payload = {
+            "user_id": user.id,
+            "email": user.email,
+            "registered_at": user.created_at.isoformat(),
+        }
+        transaction.on_commit(lambda: _producer.publish_event("user.registered", payload))
         return user
 
     def create_superuser(self, email, username, password, **extra):
