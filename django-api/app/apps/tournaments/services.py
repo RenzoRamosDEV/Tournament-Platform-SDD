@@ -57,6 +57,10 @@ class MatchService:
 
         MatchService._update_team_elo(match)
 
+        from apps.teams.services import update_elo
+        update_elo(match)
+
+
         from django.db import transaction
         import events.producer as _producer
 

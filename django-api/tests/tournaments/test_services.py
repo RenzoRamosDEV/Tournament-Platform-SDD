@@ -100,6 +100,36 @@ class MatchServiceReportResultTest(TestCase):
         MatchService.report_result(self.match.id, self.ta.id, 2, 1, is_admin=False)
         self.assertTrue(EloHistory.objects.filter(match=self.match).exists())
 
+    def test_team_elo_updated_after_match_report(self):
+        from apps.tournaments.services import MatchService
+        from apps.teams.models import EloHistory as TeamEloHistory
+
+        original_winner_elo = self.ta.elo
+        original_loser_elo = self.tb.elo
+
+        MatchService.report_result(self.match.id, self.ta.id, 2, 1, is_admin=False)
+
+        self.ta.refresh_from_db()
+        self.tb.refresh_from_db()
+
+        self.assertGreater(self.ta.elo, original_winner_elo)
+        self.assertLess(self.tb.elo, original_loser_elo)
+        self.assertEqual(TeamEloHistory.objects.filter(match=self.match).count(), 2)
+
+    def test_team_elo_update_idempotent_on_double_report(self):
+        from apps.tournaments.services import MatchService
+        from apps.teams.models import EloHistory as TeamEloHistory
+
+        MatchService.report_result(self.match.id, self.ta.id, 2, 1, is_admin=False)
+        self.ta.refresh_from_db()
+        elo_after_first = self.ta.elo
+
+        MatchService.report_result(self.match.id, self.ta.id, 2, 1, is_admin=True)
+        self.ta.refresh_from_db()
+
+        self.assertEqual(self.ta.elo, elo_after_first)
+        self.assertEqual(TeamEloHistory.objects.filter(match=self.match).count(), 2)
+
 
 # ---------------------------------------------------------------------------
 # TournamentService tests
