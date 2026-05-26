@@ -40,6 +40,17 @@ class TeamViewSet(ModelViewSet):
         in_serializer = TeamCreateSerializer(data=request.data)
         in_serializer.is_valid(raise_exception=True)
         team = in_serializer.save(owner=request.user)
+
+        from django.db import transaction
+        import events.producer as _producer
+
+        payload = {
+            "team_id": team.id,
+            "name": team.name,
+            "created_at": team.created_at.isoformat(),
+        }
+        transaction.on_commit(lambda: _producer.publish_event("team.created", payload))
+
         out_serializer = TeamResponseSerializer(team)
         return Response(out_serializer.data, status=status.HTTP_201_CREATED)
 
