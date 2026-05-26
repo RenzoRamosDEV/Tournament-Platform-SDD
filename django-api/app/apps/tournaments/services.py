@@ -56,6 +56,18 @@ class MatchService:
         match.save()
 
         MatchService._update_team_elo(match)
+
+        from django.db import transaction
+        import events.producer as _producer
+
+        payload = {
+            "match_id": match.id,
+            "team_a_id": match.team_a_id,
+            "team_b_id": match.team_b_id,
+            "winner_id": match.winner_team_id,
+            "reported_at": match.played_at.isoformat(),
+        }
+        transaction.on_commit(lambda: _producer.publish_event("match.finished", payload))
         return match
 
     @staticmethod
@@ -94,6 +106,14 @@ class MatchService:
 
         if elo_records:
             EloHistory.objects.bulk_create(elo_records)
+
+
+    @staticmethod
+    def _update_team_elo_by_match_id(match_id: int) -> None:
+        from apps.tournaments.models import Match
+
+        match = Match.objects.select_related("team_a", "team_b").get(pk=match_id)
+        MatchService._update_team_elo(match)
 
 
 class TournamentService:

@@ -67,6 +67,17 @@ class TournamentViewSet(ModelViewSet):
         in_serializer = TournamentCreateSerializer(data=request.data)
         in_serializer.is_valid(raise_exception=True)
         tournament = in_serializer.save(created_by=request.user)
+
+        from django.db import transaction
+        import events.producer as _producer
+
+        payload = {
+            "tournament_id": tournament.id,
+            "name": tournament.name,
+            "created_at": tournament.start_date.isoformat(),
+        }
+        transaction.on_commit(lambda: _producer.publish_event("tournament.created", payload))
+
         out_serializer = TournamentResponseSerializer(tournament)
         return Response(out_serializer.data, status=status.HTTP_201_CREATED)
 
